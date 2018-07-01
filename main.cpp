@@ -41,9 +41,13 @@ const uint32_t CRYPT_TAB1[64] = {
     0xFDCB1756, 0xF0387032, 0x1F27AC7D, 0x5AD014E2, 
     0x6508E3B3, 0xF13D7C92, 0xD7DA45D4, 0xA01D9485};
 
+const int BODY_SIZE_0 = 0x483A0;
+const int BODY_SIZE_2 = 0x86800;
+const int BODY_SIZE_3 = 0x88D50;
+
 typedef struct {
-    uint32_t key0[4];
-    uint32_t key1[4];
+    uint8_t key0[32];
+    uint8_t key1[32];
 } KeyPack;
 
 class SeedRand {
@@ -99,7 +103,8 @@ KeyPack getKeys(const uint32_t* crypt_tab, const uint32_t* key_seed) {
 }
 
 int main(int argc, char const *argv[]) {
-    std::string path = "../splatoon/save.dat";
+    std::string path = "../splatoon/save/save.dat";
+    std::string out_path = "save.dat.dec";
 
     std::ifstream fileis(path, std::ios::binary | std::ios::ate);
     std::streamsize size = fileis.tellg();
@@ -107,17 +112,18 @@ int main(int argc, char const *argv[]) {
     fileis.seekg(0, std::ios::beg);
 
     uint8_t save_file[size];
-    if (!fileis.read((char*)save_file, size))
-    {
+    if (!fileis.read((char*)save_file, size)) {
         std::cout << path << " fail." << std::endl;
+        return -1;
     }
 
     uint32_t vers = *(uint32_t*)save_file;
-    uint8_t iv[16];
+    uint8_t* body = &save_file[0x10];
+    uint8_t iv[0x10];
     std::memcpy(iv, &save_file[size-0x30], sizeof(iv));
     uint32_t* key_seed = (uint32_t*)&save_file[size-0x20];
-    uint8_t mac[16];
-    std::memcpy(iv, &save_file[size-0x10], sizeof(iv));
+    uint8_t mac[0x10];
+    std::memcpy(mac, &save_file[size-0x10], sizeof(iv));
 
     const uint32_t * crypt_tab;
     if(vers >= 2)
@@ -126,7 +132,20 @@ int main(int argc, char const *argv[]) {
         crypt_tab = CRYPT_TAB1;
     
     KeyPack keys = getKeys(crypt_tab, key_seed);
+    AES_KEY key;
+    AES_set_decrypt_key(keys.key0, 128, &key);
 
-    std::cout << "done" << std::endl;
+    uint8_t body_dec[BODY_SIZE_3];
+    AES_cbc_encrypt(body, body_dec, BODY_SIZE_3, &key, iv, AES_DECRYPT);
+
+    std::ofstream fileos(out_path, std::fstream::binary);
+    if (!fileos) {
+        std::cout << out_path << " fail." << std::endl;
+        return -2;
+    }
+    fileos.write((char*)save_file, 0x10);
+    fileos.write((char*)body_dec, BODY_SIZE_3);
+
+    std::cout << "Done." << std::endl;
     return 0;
 }
