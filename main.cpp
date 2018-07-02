@@ -41,13 +41,14 @@ const uint32_t CRYPT_TAB1[64] = {
     0xFDCB1756, 0xF0387032, 0x1F27AC7D, 0x5AD014E2, 
     0x6508E3B3, 0xF13D7C92, 0xD7DA45D4, 0xA01D9485};
 
-const int BODY_SIZE_0 = 0x483A0;
-const int BODY_SIZE_2 = 0x86800;
-const int BODY_SIZE_3 = 0x88D50;
+const int FILE_SIZE[4] = {0x483B0, 0x483B0, 0x86840, 0x88D90};
+
+const int BODY_SIZE[4] = {0x483A0, 0x483A0, 0x86800, 0x88D50};
+
 
 typedef struct {
-    uint8_t key0[32];
-    uint8_t key1[32];
+    uint8_t key0[0x10];
+    uint8_t key1[0x10];
 } KeyPack;
 
 class SeedRand {
@@ -90,6 +91,7 @@ uint32_t SeedRand::getU32() {
 KeyPack getKeys(const uint32_t* crypt_tab, const uint32_t* key_seed) {
     SeedRand rnd(0, key_seed);
     KeyPack ret;
+    uint8_t buf[0x20];
     for(int i = 0; i < 8; i++) {
         uint32_t k = 0;
         for(int j = 0; j < 4; j++) {
@@ -99,25 +101,26 @@ KeyPack getKeys(const uint32_t* crypt_tab, const uint32_t* key_seed) {
         }
         ((uint32_t*)&ret)[i] = k;
     }
+
     return ret;
 }
 
-int main(int argc, char const *argv[]) {
-    std::string path = "../splatoon/save/save.dat";
-    std::string out_path = "save.dat.dec";
+int calcAesCmac(uint8_t* msg, size_t msg_len, uint8_t* key, uint8_t* mac) {
+    size_t maclen;
+    CMAC_CTX *ctx = CMAC_CTX_new();
+    
+    CMAC_Init(ctx, key, 16, EVP_aes_128_cbc(), NULL);
+    CMAC_Update(ctx, msg, msg_len);
+    CMAC_Final(ctx, mac, &maclen);
+    CMAC_CTX_free(ctx);
 
-    std::ifstream fileis(path, std::ios::binary | std::ios::ate);
-    std::streamsize size = fileis.tellg();
+    return 0;
+}
 
-    fileis.seekg(0, std::ios::beg);
-
-    uint8_t save_file[size];
-    if (!fileis.read((char*)save_file, size)) {
-        std::cout << path << " fail." << std::endl;
-        return -1;
-    }
-
+int decryptSave(uint8_t* save_file, uint8_t* body_dec) {
     uint32_t vers = *(uint32_t*)save_file;
+
+    size_t size = FILE_SIZE[vers];
     uint8_t* body = &save_file[0x10];
     uint8_t iv[0x10];
     std::memcpy(iv, &save_file[size-0x30], sizeof(iv));
@@ -135,8 +138,58 @@ int main(int argc, char const *argv[]) {
     AES_KEY key;
     AES_set_decrypt_key(keys.key0, 128, &key);
 
-    uint8_t body_dec[BODY_SIZE_3];
-    AES_cbc_encrypt(body, body_dec, BODY_SIZE_3, &key, iv, AES_DECRYPT);
+    AES_cbc_encrypt(body, body_dec, BODY_SIZE[vers], &key, iv, AES_DECRYPT);
+
+    uint8_t calced_mac[0x10];
+    calcAesCmac(body_dec, BODY_SIZE[vers], (uint8_t*)&keys.key1, calced_mac);
+
+    for(int i = 0; i < 0x10; i++) {
+        if(mac[i] != calced_mac[i]) {
+            std::cout << "Warning: Stored MAC is invalid, save may have been "
+                << "modified or corrupted and decryption may produce garbage."
+                << std::endl;
+            break;
+        }
+    }
+
+    return 0;
+}
+
+int main(int argc, char const *argv[]) {
+    std::string path = "save.dat";
+    std::string out_path = "save.dat.dec";
+
+    std::ifstream fileis(path, std::ios::binary | std::ios::ate);
+    std::streamsize size = fileis.tellg();
+    fileis.seekg(0, std::ios::beg);
+
+    uint8_t save_file[size];
+    if (!fileis.read((char*)save_file, size)) {
+        std::cout << path << " fail." << std::endl;
+        return -1;
+    }
+
+    uint32_t vers = *(uint32_t*)save_file;
+    switch (vers) {
+    case 2:
+        if(size != FILE_SIZE[2]) {
+            std::cout << "Version 2 file size incorrect." << std::endl;
+            return -3;
+        }
+        break;
+    case 3:
+        if(size != FILE_SIZE[3]) {
+            std::cout << "Version 3 file size incorrect." << std::endl;
+            return -3;
+        }
+        break;
+    default:
+        std::cout << "Only save version 2 or 3 supported." << std::endl;
+        return -3;
+    }
+
+    uint8_t new_body[BODY_SIZE[vers]];
+    decryptSave(save_file, new_body);
 
     std::ofstream fileos(out_path, std::fstream::binary);
     if (!fileos) {
@@ -144,8 +197,9 @@ int main(int argc, char const *argv[]) {
         return -2;
     }
     fileos.write((char*)save_file, 0x10);
-    fileos.write((char*)body_dec, BODY_SIZE_3);
+    fileos.write((char*)new_body, BODY_SIZE[vers]);
 
-    std::cout << "Done." << std::endl;
+    std::cout << "Decrypted " << path << " to " << out_path << "!" 
+        << std::endl;
     return 0;
 }

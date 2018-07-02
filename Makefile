@@ -1,6 +1,5 @@
 main : main.cpp
-	g++ main.cpp -o main -std=c++11
+	g++ main.cpp -o splatsave -std=c++11 -lcrypto
 
 clean:
-	rm main
-
+	rm splatsave
