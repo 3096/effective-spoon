@@ -2,9 +2,11 @@
 #include <fstream>
 #include <cstring>
 #include <iostream>
-#include <openssl/aes.h>
-#include <openssl/cmac.h>
-#include <openssl/rand.h>
+#include <mbedtls/aes.h>
+#include <mbedtls/cipher.h>
+#include <mbedtls/cmac.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
 
 const int FILE_SIZE[4] = {0x483B0, 0x483B0, 0x86840, 0x88D90};
 
@@ -159,16 +161,10 @@ KeyPack getKeys(const uint32_t* crypt_tab, const uint32_t* key_seed) {
     return ret;
 }
 
-int calcAesCmac(uint8_t* msg, size_t msg_len, uint8_t* key, uint8_t* mac) {
-    size_t maclen;
-    CMAC_CTX *ctx = CMAC_CTX_new();
-    
-    CMAC_Init(ctx, key, 16, EVP_aes_128_cbc(), NULL);
-    CMAC_Update(ctx, msg, msg_len);
-    CMAC_Final(ctx, mac, &maclen);
-    CMAC_CTX_free(ctx);
-
-    return 0;
+int calcAes128Cmac(uint8_t* msg, size_t msg_len, uint8_t* key, uint8_t* mac) {
+    mbedtls_cipher_info_t cipher_info = 
+        *mbedtls_cipher_info_from_type(MBEDTLS_CIPHER_AES_128_ECB);
+    return mbedtls_cipher_cmac(&cipher_info, key, 128, msg, msg_len, mac);
 }
 
 uint32_t calcCRC32(uint8_t* msg, size_t msg_len) {
@@ -179,22 +175,43 @@ uint32_t calcCRC32(uint8_t* msg, size_t msg_len) {
     return ret ^ 0xFFFFFFFF;
 }
 
+int rand_bytes(uint8_t* output, size_t output_len) {
+    mbedtls_ctr_drbg_context ctr_drbg;
+    mbedtls_entropy_context entropy;
+    mbedtls_entropy_init(&entropy);
+    mbedtls_ctr_drbg_init(&ctr_drbg);
+
+    std::string pers = "Flow best waifu";
+
+    int ret;
+    if((ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy,
+        (unsigned char*)pers.c_str(), pers.size())) != 0) {
+        return ret;
+    }
+    if((ret = mbedtls_ctr_drbg_random(&ctr_drbg, output, output_len)) != 0) {
+        return ret;
+    }
+}
+
 SaveFooter encryptBody(uint8_t* save_file, const uint32_t* crypt_tab, 
                         uint8_t* body_enc) {
     uint32_t vers = *(uint32_t*)save_file;
     uint8_t* body = &save_file[0x10];
     SaveFooter footer;
-    RAND_bytes((uint8_t*)&footer, sizeof(footer.iv)+sizeof(footer.key_seed));
+    rand_bytes((uint8_t*)&footer, sizeof(footer.iv)+sizeof(footer.key_seed));
 
     uint8_t iv[0x10];
     std::memcpy(iv, footer.iv, sizeof(iv));
     KeyPack keys = getKeys(crypt_tab, footer.key_seed);
-    AES_KEY key;
-    AES_set_encrypt_key(keys.key0, 128, &key);    
 
-    AES_cbc_encrypt(body, body_enc, BODY_SIZE[vers], &key, iv, AES_ENCRYPT);
-    calcAesCmac(body, BODY_SIZE[vers], (uint8_t*)&keys.key1, footer.mac);
+    mbedtls_aes_context ctx; mbedtls_aes_init(&ctx);
+    mbedtls_aes_setkey_enc(&ctx, keys.key0, 128);
+   
+    mbedtls_aes_crypt_cbc(
+        &ctx, MBEDTLS_AES_ENCRYPT, BODY_SIZE[vers], iv, body, body_enc);
+    calcAes128Cmac(body, BODY_SIZE[vers], (uint8_t*)&keys.key1, footer.mac);
 
+    mbedtls_aes_free(&ctx);
     return footer;
 }
 
@@ -207,13 +224,15 @@ int decryptBody(uint8_t* save_file, const uint32_t* crypt_tab,
     memcpy(&footer, &save_file[size-0x30], sizeof(footer));
     
     KeyPack keys = getKeys(crypt_tab, footer.key_seed);
-    AES_KEY key;
-    AES_set_decrypt_key(keys.key0, 128, &key);
+    
+    mbedtls_aes_context ctx; mbedtls_aes_init(&ctx);
+    mbedtls_aes_setkey_dec(&ctx, keys.key0, 128);
 
-    AES_cbc_encrypt(body, body_dec, BODY_SIZE[vers], &key, footer.iv, AES_DECRYPT);
+    mbedtls_aes_crypt_cbc(
+        &ctx, MBEDTLS_AES_DECRYPT, BODY_SIZE[vers], footer.iv, body, body_dec);
 
     uint8_t calced_mac[0x10];
-    calcAesCmac(body_dec, BODY_SIZE[vers], (uint8_t*)&keys.key1, calced_mac);
+    calcAes128Cmac(body_dec, BODY_SIZE[vers], (uint8_t*)&keys.key1, calced_mac);
 
     for(int i = 0; i < 0x10; i++) {
         if(footer.mac[i] != calced_mac[i]) {
@@ -224,6 +243,7 @@ int decryptBody(uint8_t* save_file, const uint32_t* crypt_tab,
         }
     }
 
+    mbedtls_aes_free(&ctx);
     return 0;
 }
 
