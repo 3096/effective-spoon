@@ -27,6 +27,20 @@
 *.lib
 
 # Executables
+splatsave
 *.exe
 *.out
 *.app
+
+# Switch
+build/
+*.elf
+*.nacp
+*.nro
+*.nso
+*.pfs0
+
+# Test files
+*.dat
+*.enc
+*.dec

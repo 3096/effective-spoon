@@ -9,6 +9,10 @@
 #include <mbedtls/ctr_drbg.h>
 #include <zlib.h>
 
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+
 const int FILE_SIZE[4] = {0x483B0, 0x483B0, 0x86840, 0x88D90};
 
 const int BODY_SIZE[4] = {0x483A0, 0x483A0, 0x86800, 0x88D50};
@@ -122,6 +126,8 @@ int calcAes128Cmac(uint8_t* msg, size_t msg_len, uint8_t* key, uint8_t* mac) {
 }
 
 int rand_bytes(uint8_t* output, size_t output_len) {
+    int ret;
+#ifndef __SWITCH__
     mbedtls_ctr_drbg_context ctr_drbg;
     mbedtls_entropy_context entropy;
     mbedtls_entropy_init(&entropy);
@@ -129,14 +135,19 @@ int rand_bytes(uint8_t* output, size_t output_len) {
 
     std::string pers = "Flow best waifu";
 
-    int ret;
     if((ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy,
         (unsigned char*)pers.c_str(), pers.size())) != 0) {
         return ret;
     }
-    if((ret = mbedtls_ctr_drbg_random(&ctr_drbg, output, output_len)) != 0) {
+    ret = mbedtls_ctr_drbg_random(&ctr_drbg, output, output_len);
+#else
+    if((ret = csrngInitialize()) != 0) {
         return ret;
     }
+    ret = csrngGetRandomBytes(output, output_len);
+    csrngExit();
+#endif
+    return ret;
 }
 
 SaveFooter encryptBody(uint8_t* save_file, const uint32_t* crypt_tab, 
@@ -193,7 +204,7 @@ int decryptBody(uint8_t* save_file, const uint32_t* crypt_tab,
     return 0;
 }
 
-int main(int argc, char const *argv[]) {
+int splatsave(int argc, char const *argv[]) {
     std::string path;
     if (argc < 2) 
         path = "save.dat";
@@ -204,8 +215,20 @@ int main(int argc, char const *argv[]) {
     std::streamsize size = fileis.tellg();
     fileis.seekg(0, std::ios::beg);
 
-    uint8_t save_file[size];
-    if (!fileis.read((char*)save_file, size)) {
+    uint8_t* save_file;
+    bool fileis_error = false;
+    if(size > -1) {
+        save_file = new uint8_t[size];
+        if(!fileis.read((char*)save_file, size)) {
+            delete[] save_file;
+            fileis_error = true;
+        }
+    } else {
+        fileis_error = true;
+    }
+    
+    if (fileis_error) {
+        fileis.close();
 
         std::cout << "Could not open " << path << std::endl;
         std::cout << "Usage: " << std::endl;
@@ -219,6 +242,7 @@ int main(int argc, char const *argv[]) {
             << std::endl;
         return -1;
     }
+    fileis.close();
 
     uint32_t vers = *(uint32_t*)save_file;
     
@@ -257,7 +281,7 @@ int main(int argc, char const *argv[]) {
     else
         out_path = argv[2];
 
-    uint8_t new_body[BODY_SIZE[vers]];
+    uint8_t* new_body = new uint8_t[BODY_SIZE[vers]];
     SaveFooter footer;
 
     if(isEncrypt) {
@@ -278,6 +302,8 @@ int main(int argc, char const *argv[]) {
 
     std::ofstream fileos(out_path, std::fstream::binary);
     if(!fileos) {
+        fileos.close();
+        delete[] new_body;
         std::cout << "Could not open " << out_path << std::endl;
         return -2;
     }
@@ -291,6 +317,32 @@ int main(int argc, char const *argv[]) {
     } else {
         std::cout << "Decrypted " << path << " to " << out_path << "!" 
             << std::endl;
-    } 
+    }
+
+    fileos.close();
+    delete[] save_file;
+    delete[] new_body;
+
     return 0;
+}
+
+int main(int argc, char const *argv[]) {
+#ifdef __SWITCH__
+    gfxInitDefault();
+    consoleInit(NULL);
+#endif
+
+    int ret = splatsave(argc, argv);
+
+#ifdef __SWITCH__
+    std::cout << "Press + to exit..." << std::endl;
+    while(appletMainLoop()) {
+        hidScanInput(); u64 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
+        if (kDown & KEY_PLUS) break;
+        gfxFlushBuffers(); gfxSwapBuffers(); gfxWaitForVsync();
+    }
+    gfxExit();
+#endif
+
+    return ret;
 }
