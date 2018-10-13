@@ -28,7 +28,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 #---------------------------------------------------------------------------------
 TARGET		:=	splatsave
 BUILD		:=	build
-SOURCES		:=	.
+SOURCES		:=	source
 DATA		:=	data
 INCLUDES	:=	include
 EXEFS_SRC	:=	exefs_src
@@ -44,7 +44,7 @@ CFLAGS	:=	-g -Wall -O2 -ffunction-sections \
 
 CFLAGS	+=	$(INCLUDE) -D__SWITCH__
 
-CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
+CXXFLAGS	:= $(CFLAGS) -fno-rtti -std=gnu++11
 
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
@@ -136,12 +136,12 @@ endif
 
 .PHONY: $(BUILD) clean switch bin win
 #---------------------------------------------------------------------------------
-bin: main.cpp
-	g++ main.cpp -o splatsave -std=c++11 -lmbedcrypto -lz
+bin: $(SOURCES)
+	g++ $(SOURCES)/*.cpp -o splatsave -std=c++11 -lmbedcrypto -lz
 #---------------------------------------------------------------------------------
 # Windows rule to use with mingw, mingw openssl pre-built binary: https://wiki.openssl.org/index.php/Binaries
-win: main.cpp
-	g++ main.cpp -o splatsave.exe -std=c++11 -lmbedcrypto -lz -static-libstdc++ -static-libgcc
+win: $(SOURCES)
+	g++ $(SOURCES)/*.cpp -o splatsave.exe -std=c++11 -lmbedcrypto -lz -static-libstdc++ -static-libgcc
 
 #---------------------------------------------------------------------------------
 switch: $(BUILD)
