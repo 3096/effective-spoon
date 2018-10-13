@@ -93,7 +93,7 @@ SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
         } else if (saveFileInSize == ENCODED_FILE_SIZE[m_version]) {
             m_initial_encodeState = ENCODED;
         } else {
-            throw SaveSizeUnknown();
+            throw SaveSizeUnknown(saveFileInSize);
         }
 
         // select crypto look up table and save sizes
@@ -115,7 +115,10 @@ SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
         m_fileSize_encoded = ENCODED_FILE_SIZE[m_version];
         m_bodySize = BODY_SIZE[m_version];
 
-    } catch (std::exception& e) {
+    } catch (UnsupportedSaveVersion& e) {
+        delete[] saveFileInBuffer;
+        throw e;
+    } catch (SaveSizeUnknown& e) {
         delete[] saveFileInBuffer;
         throw e;
     }
@@ -281,10 +284,16 @@ std::vector<SaveDataFactory::ShuffleBlock> SaveDataFactory::getShuffleBlocks(
     std::vector<size_t> unshuffled_offsets;
     size_t cur_offset = 0;
     size_t cur_block_idx = 0;
-    while (total_size - cur_offset > max_block_size) {
+    while (total_size - cur_offset > min_block_size) {
+        // annoyed squid sound
+        if (max_block_size > total_size - cur_offset) {
+            max_block_size = total_size - cur_offset;
+        }
+
         uint64_t rand_num = RNG.getU32();
         size_t block_size =
-            (((min_block_size + 1)) * rand_num >> 0x20) + min_block_size;
+            (((max_block_size - min_block_size + 1)) * rand_num >> 0x20) +
+            min_block_size;
 
         block_indices.push_back(cur_block_idx);
         block_sizes.push_back(block_size);
@@ -293,13 +302,15 @@ std::vector<SaveDataFactory::ShuffleBlock> SaveDataFactory::getShuffleBlocks(
         cur_offset += block_size;
         cur_block_idx++;
     }
-    // last block
-    block_indices.push_back(cur_block_idx);
-    block_sizes.push_back(total_size - cur_offset);
-    unshuffled_offsets.push_back(cur_offset);
+    // add last block if needed?
+    if (total_size > cur_offset) {
+        block_indices.push_back(cur_block_idx);
+        block_sizes.push_back(total_size - cur_offset);
+        unshuffled_offsets.push_back(cur_offset);
+    }
 
     uint64_t remaining_blocks_to_shuffle = block_indices.size();
-    while(remaining_blocks_to_shuffle > 1) {
+    while (remaining_blocks_to_shuffle > 1) {
         size_t switch_to_idx = remaining_blocks_to_shuffle - 1;
         size_t switch_from_idx =
             remaining_blocks_to_shuffle * RNG.getU32() >> 0x20;

@@ -85,7 +85,11 @@ class SaveDataFactory {
     int getSaveVersion();
     EncodeState getInitialEncodeState();
 
-    class SaveSizeUnknown : public std::exception {};
+    class SaveSizeUnknown : public std::exception {
+    public:
+        size_t m_size;
+        SaveSizeUnknown(const size_t size): m_size(size) {}
+    };
     class DecodeFailToVerify : public std::exception {};
     class CouldNotOpenFile : public std::exception {};
     class UnsupportedSaveVersion : public std::exception {
