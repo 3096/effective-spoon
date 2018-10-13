@@ -1,7 +1,7 @@
 #include "SaveDataFactory.h"
 
 const int SaveDataFactory::ENCODED_FILE_SIZE[] = {
-    -1, 0x483E0, 0x86840, 0x88D90, 0x88D90
+    0x483B0, 0x483E0, 0x86840, 0x88D90, 0x88D90
 };
 const int SaveDataFactory::BODY_SIZE[] = {
     0x483A0, 0x483A0, 0x86800, 0x88D50, 0x88D50
@@ -69,21 +69,34 @@ SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
                              std::ios::binary | std::ios::ate);
     std::streamsize saveFileInSize = saveFileIS.tellg();
     saveFileIS.seekg(0, std::ios::beg);
-    
+
     if (saveFileInSize < 0) {
+        saveFileIS.close();
         throw CouldNotOpenFile();
     }
 
     uint8_t* saveFileInBuffer = new uint8_t[saveFileInSize];
     try {
         saveFileIS.read((char*)saveFileInBuffer, saveFileInSize);
+        saveFileIS.close();
 
         m_version = *(int*)saveFileInBuffer;
 
         // check version
         if (m_version > LATEST_SUPPORT_VERS || m_version < 0) {
-            throw UnsupportedSaveVersion();
+            throw UnsupportedSaveVersion(m_version);
         }
+
+        // check size to set m_initial_encodeState and sizes
+        if (saveFileInSize == HEADER_SIZE + BODY_SIZE[m_version]) {
+            m_initial_encodeState = DECODED;
+        } else if (saveFileInSize == ENCODED_FILE_SIZE[m_version]) {
+            m_initial_encodeState = ENCODED;
+        } else {
+            throw SaveSizeUnknown();
+        }
+
+        // select crypto look up table and save sizes
         switch (m_version) {
             case 1:
             case 2:
@@ -99,28 +112,34 @@ SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
                 m_cryptTab = nullptr;
         }
 
-        // check size to set m_initial_encodeState
-        if (saveFileInSize == ENCODED_FILE_SIZE[m_version]) {
-            m_initial_encodeState = ENCODED;
-        } else if (saveFileInSize == HEADER_SIZE + BODY_SIZE[m_version]) {
-            m_initial_encodeState = DECODED;
-        } else {
-            throw SaveSizeUnknown();
-        }
+        m_fileSize_encoded = ENCODED_FILE_SIZE[m_version];
+        m_bodySize = BODY_SIZE[m_version];
+
     } catch (std::exception& e) {
         delete[] saveFileInBuffer;
         throw e;
     }
 
-    // initialize save buffers
+    // initialize save buffers and pointers
+    if (m_initial_encodeState == ENCODED) {
+        m_saveData = new uint8_t[HEADER_SIZE + BODY_SIZE[m_version]];
+        m_saveData_encoded = saveFileInBuffer;
+    } else {
+        m_saveData = saveFileInBuffer;
+        m_saveData_encoded = new uint8_t[ENCODED_FILE_SIZE[m_version]];
+    }
+    m_saveBody = &m_saveData[HEADER_SIZE];
+    m_saveBody_encoded = &m_saveData_encoded[HEADER_SIZE];
+    if (m_version != 0) {
+        m_saveFooter =
+            (SaveFooter*)&m_saveData_encoded[m_fileSize_encoded - FOOTER_SIZE];
+    } else {
+        m_saveFooter = nullptr;
+    }
+
     try {
         if (m_initial_encodeState == ENCODED) {
-            m_saveDataEncoded = saveFileInBuffer;
-            m_saveData = new uint8_t[HEADER_SIZE + BODY_SIZE[m_version]];
             decode();
-        } else {
-            m_saveData = saveFileInBuffer;
-            m_saveDataEncoded = new uint8_t[ENCODED_FILE_SIZE[m_version]];
         }
     } catch (std::exception& e) {
         this->~SaveDataFactory();
@@ -130,7 +149,7 @@ SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
 
 SaveDataFactory::~SaveDataFactory() {
     delete[] m_saveData;
-    delete[] m_saveDataEncoded;
+    delete[] m_saveData_encoded;
 }
 
 SaveDataFactory::KeyPack SaveDataFactory::getKeys(
@@ -151,43 +170,130 @@ SaveDataFactory::KeyPack SaveDataFactory::getKeys(
     return keys;
 }
 
-void SaveDataFactory::encode() {}
-void SaveDataFactory::shuffle() {}
-void SaveDataFactory::unshuffle() {}
-void SaveDataFactory::getShufflePtrArray() {}
+void SaveDataFactory::encode() {
+    // ver 0 save is plaintext
+    if (m_version == 0) {
+        std::memcpy(m_saveData_encoded, m_saveData, m_fileSize_encoded);
+        return;
+    }
+
+    std::memcpy(m_saveData_encoded, m_saveData, HEADER_SIZE);
+
+    // gen random iv and key seed
+    randBytes((uint8_t*)m_saveFooter,
+              sizeof(m_saveFooter->iv) + sizeof(m_saveFooter->keySeed));
+
+    std::array<uint8_t, 0x10> iv;
+    iv = m_saveFooter->iv;
+
+    KeyPack keys = getKeys(m_saveFooter->keySeed);
+
+    mbedtls_aes_context ctx;
+    mbedtls_aes_init(&ctx);
+    mbedtls_aes_setkey_enc(&ctx, keys.key0.data(), 128);
+    mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_ENCRYPT, m_bodySize, iv.data(),
+                          m_saveBody, m_saveBody_encoded);
+    mbedtls_aes_free(&ctx);
+
+    if (m_version == 4) {
+        shuffle();
+    }
+
+    mbedtls_cipher_info_t cipher_info =
+        *mbedtls_cipher_info_from_type(MBEDTLS_CIPHER_AES_128_ECB);
+    mbedtls_cipher_cmac(&cipher_info, keys.key1.data(), 128, m_saveBody,
+                        m_bodySize, m_saveFooter->mac.data());
+}
 
 void SaveDataFactory::decode() {
     // copy header
-    std::memcpy(m_saveData, m_saveDataEncoded, HEADER_SIZE);
+    std::memcpy(m_saveData, m_saveData_encoded, HEADER_SIZE);
 
     if (m_version == 4) {
         unshuffle();
     }
-
-    const size_t enc_file_size = ENCODED_FILE_SIZE[m_version];
-    const size_t body_size = BODY_SIZE[m_version];
-    const uint8_t* encoded_body = &m_saveDataEncoded[HEADER_SIZE];
-    uint8_t* decoded_body = &m_saveData[HEADER_SIZE];
-    const SaveFooter* footer =
-        (SaveFooter*)&m_saveDataEncoded[enc_file_size - FOOTER_SIZE];
-    KeyPack keys = getKeys(footer->keySeed);
+    KeyPack keys = getKeys(m_saveFooter->keySeed);
     std::array<uint8_t, 0x10> iv;
-    iv = footer->iv;
+    iv = m_saveFooter->iv;
 
     mbedtls_aes_context ctx;
     mbedtls_aes_init(&ctx);
     mbedtls_aes_setkey_dec(&ctx, keys.key0.data(), 128);
-    mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, body_size, iv.data(),
-                          encoded_body, decoded_body);
+    mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, m_bodySize, iv.data(),
+                          m_saveBody_encoded, m_saveBody);
     mbedtls_aes_free(&ctx);
 
     std::array<uint8_t, 0x10> calced_mac;
     mbedtls_cipher_info_t cipher_info =
         *mbedtls_cipher_info_from_type(MBEDTLS_CIPHER_AES_128_ECB);
-    mbedtls_cipher_cmac(&cipher_info, keys.key1.data(), 128, decoded_body,
-                        body_size, calced_mac.data());
+    mbedtls_cipher_cmac(&cipher_info, keys.key1.data(), 128, m_saveBody,
+                        m_bodySize, calced_mac.data());
 
-    if (footer->mac != calced_mac) {
+    if (m_saveFooter->mac != calced_mac) {
         throw DecodeFailToVerify();
     }
+}
+
+void SaveDataFactory::shuffle() {
+    uint8_t* tmpBodyUnshuffled = new uint8_t[m_bodySize];
+    std::memcpy(tmpBodyUnshuffled, m_saveBody, m_bodySize);
+
+    delete[] tmpBodyUnshuffled;
+}
+
+void SaveDataFactory::unshuffle() {
+    uint8_t* tmpBodyShuffled = new uint8_t[m_bodySize];
+    std::memcpy(tmpBodyShuffled, m_saveBody_encoded, m_bodySize);
+
+    delete[] tmpBodyShuffled;
+}
+
+std::vector<SaveDataFactory::ShuffleBlock> SaveDataFactory::getShuffleBlocks(
+    uint8_t* shuffling_text, size_t size, uint32_t seed) {
+    SeedRand RNG(seed);
+
+    std::vector<size_t> sizes;
+}
+
+// used in save encoding
+int SaveDataFactory::randBytes(uint8_t* output, const size_t output_len) {
+    int ret;
+#ifndef __SWITCH__
+    mbedtls_ctr_drbg_context ctr_drbg;
+    mbedtls_entropy_context entropy;
+    mbedtls_entropy_init(&entropy);
+    mbedtls_ctr_drbg_init(&ctr_drbg);
+
+    std::string pers = "Flow best waifu";
+
+    if ((ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy,
+                                     (unsigned char*)pers.c_str(),
+                                     pers.size())) != 0) {
+        return ret;
+    }
+    ret = mbedtls_ctr_drbg_random(&ctr_drbg, output, output_len);
+#else
+    if ((ret = csrngInitialize()) != 0) {
+        return ret;
+    }
+    ret = csrngGetRandomBytes(output, output_len);
+    csrngExit();
+#endif
+    return ret;
+}
+
+const uint8_t* SaveDataFactory::getSaveDecodedPtr() { return m_saveData; }
+
+const uint8_t* SaveDataFactory::getSaveEncodedPtr() {
+    encode();
+    return m_saveData_encoded;
+}
+
+size_t SaveDataFactory::getDecodedSaveFileSize() { return HEADER_SIZE + m_bodySize; }
+size_t SaveDataFactory::getEncodedSaveFileSize() { return m_fileSize_encoded; }
+
+int SaveDataFactory::getSaveVersion() { return m_version; }
+
+SaveDataFactory::EncodeState SaveDataFactory::getInitialEncodeState() {
+    return m_initial_encodeState;
 }
