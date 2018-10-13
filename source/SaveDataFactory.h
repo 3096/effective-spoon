@@ -9,6 +9,8 @@
 #include <array>
 #include <fstream>
 #include <iostream>
+#include <limits>
+#include <vector>
 
 #include "SeedRand.h"
 
@@ -23,6 +25,12 @@ class SaveDataFactory {
     static const uint8_t HEADER_SIZE = 0x10;
     static const uint8_t FOOTER_SIZE = 0x30;
     
+    typedef struct {
+        std::array<uint8_t, 0x10> iv;
+        std::array<uint32_t, 4> keySeed;
+        std::array<uint8_t, 0x10> mac;
+    } SaveFooter;
+    
     uint8_t* m_saveData;
     uint8_t* m_saveData_encoded;
     uint8_t* m_saveBody;
@@ -32,7 +40,7 @@ class SaveDataFactory {
     size_t m_fileSize_encoded;
 
     // save content
-    int* m_version;
+    int m_version;
     static const int LATEST_SUPPORT_VERS = 4;
 
     // save crypto
@@ -46,12 +54,6 @@ class SaveDataFactory {
         std::array<uint8_t, 0x10> key1;
     } KeyPack;
     KeyPack getKeys(const std::array<uint32_t, 4> key_seed);
-    
-    typedef struct {
-        std::array<uint8_t, 0x10> iv;
-        std::array<uint32_t, 4> keySeed;
-        std::array<uint8_t, 0x10> mac;
-    } SaveFooter;
 
     void encode();
     void decode();
@@ -59,7 +61,6 @@ class SaveDataFactory {
 
     // save shuffle
     typedef struct {
-        uint32_t block_num;
         size_t block_size;
         size_t unshuffled_offset;
         size_t shuffled_offset;
@@ -67,7 +68,8 @@ class SaveDataFactory {
 
     void unshuffle();
     void shuffle();
-    std::vector<ShuffleBlock> getShuffleBlocks();
+    std::vector<ShuffleBlock> getShuffleBlocks(size_t total_size,
+                                               uint32_t seed);
 
     EncodeState m_initial_encodeState;
 

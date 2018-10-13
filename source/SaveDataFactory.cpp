@@ -141,7 +141,7 @@ SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
         if (m_initial_encodeState == ENCODED) {
             decode();
         }
-    } catch (std::exception& e) {
+    } catch (DecodeFailToVerify& e) {
         this->~SaveDataFactory();
         throw e;
     }
@@ -238,6 +238,17 @@ void SaveDataFactory::shuffle() {
     uint8_t* tmpBodyUnshuffled = new uint8_t[m_bodySize];
     std::memcpy(tmpBodyUnshuffled, m_saveBody, m_bodySize);
 
+    uint32_t* crc = (uint32_t*)&m_saveData[0x8];
+
+    std::vector<ShuffleBlock> shuffleBlocks =
+        getShuffleBlocks(m_bodySize, *crc);
+
+    for (int i = 0; i < shuffleBlocks.size(); i++) {
+        std::memcpy(&m_saveBody_encoded[shuffleBlocks[i].shuffled_offset],
+                    &tmpBodyUnshuffled[shuffleBlocks[i].unshuffled_offset],
+                    shuffleBlocks[i].block_size);
+    }
+
     delete[] tmpBodyUnshuffled;
 }
 
@@ -245,14 +256,68 @@ void SaveDataFactory::unshuffle() {
     uint8_t* tmpBodyShuffled = new uint8_t[m_bodySize];
     std::memcpy(tmpBodyShuffled, m_saveBody_encoded, m_bodySize);
 
+    uint32_t* crc = (uint32_t*)&m_saveData_encoded[0x8];
+
+    std::vector<ShuffleBlock> shuffleBlocks =
+        getShuffleBlocks(m_bodySize, *crc);
+
+    for (int i = 0; i < shuffleBlocks.size(); i++) {
+        std::memcpy(&m_saveBody_encoded[shuffleBlocks[i].unshuffled_offset],
+                    &tmpBodyShuffled[shuffleBlocks[i].shuffled_offset],
+                    shuffleBlocks[i].block_size);
+    }
+
     delete[] tmpBodyShuffled;
 }
 
 std::vector<SaveDataFactory::ShuffleBlock> SaveDataFactory::getShuffleBlocks(
-    uint8_t* shuffling_text, size_t size, uint32_t seed) {
+    size_t total_size, uint32_t seed) {
     SeedRand RNG(seed);
+    size_t min_block_size = total_size / 0x10;
+    size_t max_block_size = min_block_size * 2;
 
-    std::vector<size_t> sizes;
+    std::vector<size_t> block_indices;
+    std::vector<size_t> block_sizes;
+    std::vector<size_t> unshuffled_offsets;
+    size_t cur_offset = 0;
+    size_t cur_block_idx = 0;
+    while (total_size - cur_offset > max_block_size) {
+        uint64_t rand_num = RNG.getU32();
+        size_t block_size =
+            (((min_block_size + 1)) * rand_num >> 0x20) + min_block_size;
+
+        block_indices.push_back(cur_block_idx);
+        block_sizes.push_back(block_size);
+        unshuffled_offsets.push_back(cur_offset);
+
+        cur_offset += block_size;
+        cur_block_idx++;
+    }
+    // last block
+    block_indices.push_back(cur_block_idx);
+    block_sizes.push_back(total_size - cur_offset);
+    unshuffled_offsets.push_back(cur_offset);
+
+    uint64_t remaining_blocks_to_shuffle = block_indices.size();
+    while(remaining_blocks_to_shuffle > 1) {
+        size_t switch_to_idx = remaining_blocks_to_shuffle - 1;
+        size_t switch_from_idx =
+            remaining_blocks_to_shuffle * RNG.getU32() >> 0x20;
+        size_t to_back = block_indices[switch_from_idx];
+        block_indices[switch_from_idx] = block_indices[switch_to_idx];
+        block_indices[switch_to_idx] = to_back;
+        remaining_blocks_to_shuffle--;
+    }
+
+    std::vector<ShuffleBlock> shuffle_blocks;
+    size_t cur_shuffled_offset = 0;
+    for (int i = 0; i < block_indices.size(); i++) {
+        shuffle_blocks.push_back({block_sizes[block_indices[i]],
+                                  unshuffled_offsets[block_indices[i]],
+                                  cur_shuffled_offset});
+        cur_shuffled_offset += block_sizes[block_indices[i]];
+    }
+    return shuffle_blocks;
 }
 
 // used in save encoding
@@ -289,7 +354,9 @@ const uint8_t* SaveDataFactory::getSaveEncodedPtr() {
     return m_saveData_encoded;
 }
 
-size_t SaveDataFactory::getDecodedSaveFileSize() { return HEADER_SIZE + m_bodySize; }
+size_t SaveDataFactory::getDecodedSaveFileSize() {
+    return HEADER_SIZE + m_bodySize;
+}
 size_t SaveDataFactory::getEncodedSaveFileSize() { return m_fileSize_encoded; }
 
 int SaveDataFactory::getSaveVersion() { return m_version; }
