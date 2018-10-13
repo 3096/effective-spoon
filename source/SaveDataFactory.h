@@ -12,6 +12,10 @@
 #include <limits>
 #include <vector>
 
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+
 #include "SeedRand.h"
 
 class SaveDataFactory {

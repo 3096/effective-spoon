@@ -239,14 +239,14 @@ void SaveDataFactory::decode() {
 
 void SaveDataFactory::shuffle() {
     uint8_t* tmpBodyUnshuffled = new uint8_t[m_bodySize];
-    std::memcpy(tmpBodyUnshuffled, m_saveBody, m_bodySize);
+    std::memcpy(tmpBodyUnshuffled, m_saveBody_encoded, m_bodySize);
 
     uint32_t* crc = (uint32_t*)&m_saveData[0x8];
 
     std::vector<ShuffleBlock> shuffleBlocks =
         getShuffleBlocks(m_bodySize, *crc);
 
-    for (int i = 0; i < shuffleBlocks.size(); i++) {
+    for (size_t i = 0; i < shuffleBlocks.size(); i++) {
         std::memcpy(&m_saveBody_encoded[shuffleBlocks[i].shuffled_offset],
                     &tmpBodyUnshuffled[shuffleBlocks[i].unshuffled_offset],
                     shuffleBlocks[i].block_size);
@@ -264,7 +264,7 @@ void SaveDataFactory::unshuffle() {
     std::vector<ShuffleBlock> shuffleBlocks =
         getShuffleBlocks(m_bodySize, *crc);
 
-    for (int i = 0; i < shuffleBlocks.size(); i++) {
+    for (size_t i = 0; i < shuffleBlocks.size(); i++) {
         std::memcpy(&m_saveBody_encoded[shuffleBlocks[i].unshuffled_offset],
                     &tmpBodyShuffled[shuffleBlocks[i].shuffled_offset],
                     shuffleBlocks[i].block_size);
@@ -322,7 +322,7 @@ std::vector<SaveDataFactory::ShuffleBlock> SaveDataFactory::getShuffleBlocks(
 
     std::vector<ShuffleBlock> shuffle_blocks;
     size_t cur_shuffled_offset = 0;
-    for (int i = 0; i < block_indices.size(); i++) {
+    for (size_t i = 0; i < block_indices.size(); i++) {
         shuffle_blocks.push_back({block_sizes[block_indices[i]],
                                   unshuffled_offsets[block_indices[i]],
                                   cur_shuffled_offset});
