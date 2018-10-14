@@ -62,6 +62,7 @@ class SaveDataFactory {
     void encode();
     void decode();
     int randBytes(uint8_t* output, const size_t output_len);
+    void updateCRC();
 
     // save shuffle
     typedef struct {
