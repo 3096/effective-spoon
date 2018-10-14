@@ -148,6 +148,9 @@ SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
         this->~SaveDataFactory();
         throw e;
     }
+
+    // in case crc is not fixed
+    updateCRC();
 }
 
 SaveDataFactory::~SaveDataFactory() {
@@ -235,6 +238,11 @@ void SaveDataFactory::decode() {
     if (m_saveFooter->mac != calced_mac) {
         throw DecodeFailToVerify();
     }
+}
+
+void SaveDataFactory::updateCRC() {
+    *(uint32_t*)&m_saveData[0x8] =
+        crc32(0L, &m_saveData[HEADER_SIZE], m_bodySize);
 }
 
 void SaveDataFactory::shuffle() {
