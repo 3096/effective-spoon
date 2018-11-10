@@ -145,7 +145,7 @@ bin: $(SOURCES)
 #---------------------------------------------------------------------------------
 # Windows rule to use with mingw, mingw openssl pre-built binary: https://wiki.openssl.org/index.php/Binaries
 win: $(SOURCES)
-	g++ $(SOURCES)/*.cpp -o splatsave.exe -std=c++11 -lmbedcrypto -lz -static-libstdc++ -static-libgcc
+	g++ $(SOURCES)/*.cpp -o splatsave.exe -static -std=c++11 -lmbedcrypto -lz -static-libstdc++ -static-libgcc -lpthread
 
 #---------------------------------------------------------------------------------
 switch: $(BUILD)

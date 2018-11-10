@@ -1,10 +1,10 @@
 #include "SaveDataFactory.h"
 
 const int SaveDataFactory::ENCODED_FILE_SIZE[] = {
-    0x483B0, 0x483E0, 0x86840, 0x88D90, 0x88D90
+    0x483B0, 0x483E0, 0x86840, 0x88D90, 0x88D90, 0x88D90
 };
 const int SaveDataFactory::BODY_SIZE[] = {
-    0x483A0, 0x483A0, 0x86800, 0x88D50, 0x88D50
+    0x483A0, 0x483A0, 0x86800, 0x88D50, 0x88D50, 0x88D50
 };
 
 const uint32_t SaveDataFactory::CRYPT_TAB2[] = {
@@ -106,6 +106,7 @@ SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
                 m_cryptTab = CRYPT_TAB3;
                 break;
             case 4:
+            case 5:
                 m_cryptTab = CRYPT_TAB4;
                 break;
             default:
