@@ -45,7 +45,7 @@ class SaveDataFactory {
 
     // save content
     int m_version;
-    static const int LATEST_SUPPORT_VERS = 4;
+    static const int LATEST_SUPPORT_VERS = 5;
 
     // save crypto
     static const uint32_t CRYPT_TAB2[];
