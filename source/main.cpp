@@ -30,6 +30,19 @@ int splatsave(int argc, char const* argv[]) {
             save_write_size = svFactory.getEncodedSaveFileSize();
         }
 
+        std::ifstream fileExistCheck(save_output_path);
+        if (fileExistCheck.good()) {
+            std::cout << "Overwrite existing " << save_output_path
+                      << "? (y or n) ";
+            std::string userInput;
+            getline(std::cin, userInput);
+            char firstLetter = userInput.at(0);
+            if(firstLetter != 'y' and firstLetter != 'Y') {
+                std::cout << "Aborted." << std::endl;
+                return 0;
+            }
+        }
+
         std::ofstream fileos(save_output_path, std::fstream::binary);
         if (!fileos) {
             std::cout << "Could not open " << save_output_path << std::endl;
@@ -46,8 +59,16 @@ int splatsave(int argc, char const* argv[]) {
                       << "!" << std::endl;
         }
     } catch (SaveDataFactory::SaveSizeUnknown& e) {
-        std::cout << "Save size incorrect: 0x" << std::hex << e.m_size
+        if (e.m_version == 6) {
+            std::cout << "Save version 6 was never seen before. If your save "
+                         "was previously unmodified, please submit an issue "
+                         "on the project's GitHub page or send me an email at "
+                         "contact@the3096.com! Thank you."
+                      << std::hex << e.m_size << std::endl;
+        } else {
+            std::cout << "Save size incorrect: 0x" << std::hex << e.m_size
                   << std::endl;
+        }
         return -4;
     } catch (SaveDataFactory::UnsupportedSaveVersion& e) {
         std::cout << "Save version unsupported: " << e.m_version << std::endl;
