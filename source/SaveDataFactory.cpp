@@ -1,13 +1,13 @@
 #include "SaveDataFactory.h"
 
 const int SaveDataFactory::ENCODED_FILE_SIZE[] = {
-    0x483B0, 0x483E0, 0x86840, 0x88D90, 0x88D90, 0x88D90
+    0x483B0, 0x483E0, 0x86840, 0x88D90, 0x88D90, 0x88D90, -1, 0x88D90
 };
 const int SaveDataFactory::BODY_SIZE[] = {
-    0x483A0, 0x483A0, 0x86800, 0x88D50, 0x88D50, 0x88D50
+    0x483A0, 0x483A0, 0x86800, 0x88D50, 0x88D50, 0x88D50, -1, 0x88D50
 };
 
-const uint32_t SaveDataFactory::CRYPT_TAB2[] = {
+const uint32_t SaveDataFactory::CRYPT_TAB1[] = {
     0x476BC5E7, 0x76DF4A26, 0x2BD714E2, 0x632623A5,
     0xD36838ED, 0x7583042F, 0x32B3A6CE, 0x301180A2,
     0x63479874, 0xB0EEF148, 0x4144F37F, 0x717EDD13,
@@ -46,22 +46,41 @@ const uint32_t SaveDataFactory::CRYPT_TAB3[] = {
 };
 
 const uint32_t SaveDataFactory::CRYPT_TAB4[]  = {
-    0x0b11fbd2, 0x6d17658a, 0x12975ee9, 0xaaaa885d,
-    0x2ee139b1, 0xf80c32d2, 0x50c45b2c, 0xaed2d909,
-    0x89d951d3, 0x10da7898, 0x62b55c94, 0x5a97db5a,
-    0x19834e12, 0xda5eeb02, 0x12c75d21, 0xf66e1928,
-    0xf59e2a29, 0xd8b5c963, 0xf0b3a901, 0x76924966,
-    0x7259eaff, 0x04d1cb06, 0x6947913c, 0x8d7a3c0b,
-    0x30c93149, 0xbaca45ad, 0xef51edb9, 0xb3970e3c,
-    0xcaad227e, 0x22a2f1ab, 0x42feec63, 0x4913ecee,
-    0xea0e8960, 0xdf141223, 0x6a3c6056, 0xbc9e8563,
-    0x22455e19, 0x5dbfd578, 0xd4083049, 0x9cf50236,
-    0x94483227, 0x37ff21c3, 0xa2e0d50d, 0x963097d5,
-    0x433c563e, 0x8d0396a3, 0x29ef72b3, 0x3b73c664,
-    0x9a5fea92, 0x0b78c1f4, 0x595050c2, 0xfcb5fd6a,
-    0x99db9314, 0x546196ba, 0x8f6c0ab4, 0xdc61e89e,
-    0x99678335, 0xc1eb02e5, 0x2e3d89c6, 0xfdcbb187,
-    0x5810fb20, 0xc17526ed, 0x03c4f4bc, 0xa3233aca
+    0x0B11FBD2, 0x6D17658A, 0x12975EE9, 0xAAAA885D,
+    0x2EE139B1, 0xF80C32D2, 0x50C45B2C, 0xAED2D909,
+    0x89D951D3, 0x10DA7898, 0x62B55C94, 0x5A97DB5A,
+    0x19834E12, 0xDA5EEB02, 0x12C75D21, 0xF66E1928,
+    0xF59E2A29, 0xD8B5C963, 0xF0B3A901, 0x76924966,
+    0x7259EAFF, 0x04D1CB06, 0x6947913C, 0x8D7A3C0B,
+    0x30C93149, 0xBACA45AD, 0xEF51EDB9, 0xB3970E3C,
+    0xCAAD227E, 0x22A2F1AB, 0x42FEEC63, 0x4913ECEE,
+    0xEA0E8960, 0xDF141223, 0x6A3C6056, 0xBC9E8563,
+    0x22455E19, 0x5DBFD578, 0xD4083049, 0x9CF50236,
+    0x94483227, 0x37FF21C3, 0xA2E0D50D, 0x963097D5,
+    0x433C563E, 0x8D0396A3, 0x29EF72B3, 0x3B73C664,
+    0x9A5FEA92, 0x0B78C1F4, 0x595050C2, 0xFCB5FD6A,
+    0x99DB9314, 0x546196BA, 0x8F6C0AB4, 0xDC61E89E,
+    0x99678335, 0xC1EB02E5, 0x2E3D89C6, 0xFDCBB187,
+    0x5810FB20, 0xC17526ED, 0x03C4F4BC, 0xA3233ACA
+};
+
+const uint32_t SaveDataFactory::CRYPT_TAB7[]  = {
+    0x266715A6, 0x89D12790, 0x6A2FB118, 0x781CE44A,
+    0x66C804CA, 0x66254224, 0x71959889, 0xEE341C45,
+    0xC8FCBB1D, 0x8484F444, 0x5908658D, 0x17908CDD,
+    0x3A99F961, 0x991C0CA2, 0x83223601, 0x1047B4DC,
+    0xE5E01544, 0x9CE06C46, 0x0EE0D3E5, 0x232C67B1,
+    0xC6831CA5, 0x599EDA6F, 0x51E95542, 0x11B8A121,
+    0xCF00F187, 0x60E207AA, 0x7BBA0DB1, 0xAFDF1A4E,
+    0x679B4AFB, 0x1734CEF5, 0xBC489E27, 0xEB12EE8A,
+    0x5663AD81, 0xE79182DE, 0x1FD081AD, 0x63CA5A63,
+    0x288EFC3E, 0x43620C83, 0xD82430AB, 0xE90C708E,
+    0xB63C0E9D, 0xE5690ACD, 0x1C31DFA3, 0x963354AB,
+    0xC02DE816, 0x6DBFADBC, 0xFFE1AB6F, 0xF37B2E34,
+    0x5CB90515, 0xCCFB9173, 0x3EB3E150, 0x1493623C,
+    0x80965C16, 0x90F6357E, 0x31EEFF51, 0xBEE3F9D2,
+    0x8CA774F4, 0xADDBFDDB, 0xEB898B46, 0x4A05D28C,
+    0xFDB20FEC, 0x8FF500A4, 0x288179A7, 0x4C745F89
 };
 
 SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
@@ -93,14 +112,14 @@ SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
         } else if (saveFileInSize == ENCODED_FILE_SIZE[m_version]) {
             m_initial_encodeState = ENCODED;
         } else {
-            throw SaveSizeUnknown(saveFileInSize);
+            throw SaveSizeUnknown(saveFileInSize, m_version);
         }
 
         // select crypto look up table and save sizes
         switch (m_version) {
             case 1:
             case 2:
-                m_cryptTab = CRYPT_TAB2;
+                m_cryptTab = CRYPT_TAB1;
                 break;
             case 3:
                 m_cryptTab = CRYPT_TAB3;
@@ -109,6 +128,10 @@ SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
             case 5:
                 m_cryptTab = CRYPT_TAB4;
                 break;
+            case 7:
+                m_cryptTab = CRYPT_TAB7;
+                break;
+            case 6:
             default:
                 throw UnsupportedSaveVersion(m_version);
         }
@@ -195,6 +218,13 @@ void SaveDataFactory::encode() {
 
     KeyPack keys = getKeys(m_saveFooter->keySeed);
 
+    uint8_t* tmpOriginalBody;
+    if (m_version == 7) {
+        tmpOriginalBody = new uint8_t[m_bodySize];
+        std::memcpy(tmpOriginalBody, m_saveBody, m_bodySize);
+        shuffle(false);
+    }
+
     mbedtls_aes_context ctx;
     mbedtls_aes_init(&ctx);
     mbedtls_aes_setkey_enc(&ctx, keys.key0.data(), 128);
@@ -202,7 +232,12 @@ void SaveDataFactory::encode() {
                           m_saveBody, m_saveBody_encoded);
     mbedtls_aes_free(&ctx);
 
-    if (m_version == 4) {
+    if (m_version == 7) {
+        std::memcpy(m_saveBody, tmpOriginalBody, m_bodySize);
+        delete[] tmpOriginalBody;
+    }
+
+    if (m_version == 4 or m_version == 7) {
         shuffle();
     }
 
@@ -216,7 +251,7 @@ void SaveDataFactory::decode() {
     // copy header
     std::memcpy(m_saveData, m_saveData_encoded, HEADER_SIZE);
 
-    if (m_version == 4) {
+    if (m_version == 4 or m_version == 7) {
         unshuffle();
     }
     KeyPack keys = getKeys(m_saveFooter->keySeed);
@@ -229,6 +264,10 @@ void SaveDataFactory::decode() {
     mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, m_bodySize, iv.data(),
                           m_saveBody_encoded, m_saveBody);
     mbedtls_aes_free(&ctx);
+
+    if (m_version == 7) {
+        unshuffle(false);
+    }
 
     std::array<uint8_t, 0x10> calced_mac;
     mbedtls_cipher_info_t cipher_info =
@@ -246,17 +285,19 @@ void SaveDataFactory::updateCRC() {
         crc32(0L, &m_saveData[HEADER_SIZE], m_bodySize);
 }
 
-void SaveDataFactory::shuffle() {
+void SaveDataFactory::shuffle(bool onEncoded) {
     uint8_t* tmpBodyUnshuffled = new uint8_t[m_bodySize];
-    std::memcpy(tmpBodyUnshuffled, m_saveBody_encoded, m_bodySize);
+    uint8_t* bodyToShuffle = onEncoded ? m_saveBody_encoded : m_saveBody;
+    uint32_t* crc = onEncoded ? (uint32_t*)&m_saveData_encoded[0x8]
+                              : (uint32_t*)&m_saveData[0x8];
 
-    uint32_t* crc = (uint32_t*)&m_saveData[0x8];
+    std::memcpy(tmpBodyUnshuffled, bodyToShuffle, m_bodySize);
 
     std::vector<ShuffleBlock> shuffleBlocks =
         getShuffleBlocks(m_bodySize, *crc);
 
     for (size_t i = 0; i < shuffleBlocks.size(); i++) {
-        std::memcpy(&m_saveBody_encoded[shuffleBlocks[i].shuffled_offset],
+        std::memcpy(&bodyToShuffle[shuffleBlocks[i].shuffled_offset],
                     &tmpBodyUnshuffled[shuffleBlocks[i].unshuffled_offset],
                     shuffleBlocks[i].block_size);
     }
@@ -264,17 +305,19 @@ void SaveDataFactory::shuffle() {
     delete[] tmpBodyUnshuffled;
 }
 
-void SaveDataFactory::unshuffle() {
+void SaveDataFactory::unshuffle(bool onEncoded) {
     uint8_t* tmpBodyShuffled = new uint8_t[m_bodySize];
-    std::memcpy(tmpBodyShuffled, m_saveBody_encoded, m_bodySize);
+    uint8_t* bodyToUnshuffle = onEncoded ? m_saveBody_encoded : m_saveBody;
+    uint32_t* crc = onEncoded ? (uint32_t*)&m_saveData_encoded[0x8]
+                              : (uint32_t*)&m_saveData[0x8];
 
-    uint32_t* crc = (uint32_t*)&m_saveData_encoded[0x8];
+    std::memcpy(tmpBodyShuffled, bodyToUnshuffle, m_bodySize);
 
     std::vector<ShuffleBlock> shuffleBlocks =
         getShuffleBlocks(m_bodySize, *crc);
 
     for (size_t i = 0; i < shuffleBlocks.size(); i++) {
-        std::memcpy(&m_saveBody_encoded[shuffleBlocks[i].unshuffled_offset],
+        std::memcpy(&bodyToUnshuffle[shuffleBlocks[i].unshuffled_offset],
                     &tmpBodyShuffled[shuffleBlocks[i].shuffled_offset],
                     shuffleBlocks[i].block_size);
     }

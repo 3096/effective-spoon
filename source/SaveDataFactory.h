@@ -45,12 +45,13 @@ class SaveDataFactory {
 
     // save content
     int m_version;
-    static const int LATEST_SUPPORT_VERS = 5;
+    static const int LATEST_SUPPORT_VERS = 7;
 
     // save crypto
-    static const uint32_t CRYPT_TAB2[];
+    static const uint32_t CRYPT_TAB1[];
     static const uint32_t CRYPT_TAB3[];
     static const uint32_t CRYPT_TAB4[];
+    static const uint32_t CRYPT_TAB7[];
     const uint32_t* m_cryptTab;
     
     typedef struct {
@@ -71,8 +72,8 @@ class SaveDataFactory {
         size_t shuffled_offset;
     } ShuffleBlock;
 
-    void unshuffle();
-    void shuffle();
+    void unshuffle(bool onEncoded = true);
+    void shuffle(bool onEncoded = true);
     std::vector<ShuffleBlock> getShuffleBlocks(size_t total_size,
                                                uint32_t seed);
 
@@ -93,7 +94,9 @@ class SaveDataFactory {
     class SaveSizeUnknown : public std::exception {
     public:
         size_t m_size;
-        SaveSizeUnknown(const size_t size): m_size(size) {}
+        int m_version;
+        SaveSizeUnknown(const size_t size, const int version)
+            : m_size(size), m_version(version) {}
     };
     class DecodeFailToVerify : public std::exception {};
     class CouldNotOpenFile : public std::exception {};
