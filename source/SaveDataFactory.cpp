@@ -182,22 +182,20 @@ SaveDataFactory::~SaveDataFactory() {
     delete[] m_saveData_encoded;
 }
 
-SaveDataFactory::KeyPack SaveDataFactory::getKeys(
-    const std::array<uint32_t, 4> key_seed) {
-    SeedRand rnd(0, key_seed);
-    KeyPack keys;
-    for (int i = 0; i < 8; i++) {
+std::array<uint8_t, 0x10> SaveDataFactory::getKey(SeedRand& RNG) {
+    std::array<uint8_t, 0x10> key;
+    for (int i = 0; i < 4; i++) {
         uint32_t k = 0;
         for (int j = 0; j < 4; j++) {
             k <<= 8;
-            k |= (uint32_t)((m_cryptTab[rnd.getU32() >> 26] >>
-                             ((rnd.getU32() >> 27) & 0x18)) &
+            k |= (uint32_t)((m_cryptTab[RNG.getU32() >> 26] >>
+                             ((RNG.getU32() >> 27) & 0x18)) &
                             0xFF);
         }
-        ((uint32_t*)&keys)[i] = k;
+        ((uint32_t*)&key)[i] = k;
     }
 
-    return keys;
+    return key;
 }
 
 void SaveDataFactory::encode() {
@@ -215,19 +213,19 @@ void SaveDataFactory::encode() {
 
     std::array<uint8_t, 0x10> iv;
     iv = m_saveFooter->iv;
+    SeedRand keyRNG(m_saveFooter->keySeed);
 
-    KeyPack keys = getKeys(m_saveFooter->keySeed);
-
-    uint8_t* tmpOriginalBody;
+    uint8_t* tmpOriginalBody = nullptr;
     if (m_version == 7) {
         tmpOriginalBody = new uint8_t[m_bodySize];
         std::memcpy(tmpOriginalBody, m_saveBody, m_bodySize);
         shuffle(false);
     }
 
+    std::array<uint8_t, 0x10> encKey = getKey(keyRNG);
     mbedtls_aes_context ctx;
     mbedtls_aes_init(&ctx);
-    mbedtls_aes_setkey_enc(&ctx, keys.key0.data(), 128);
+    mbedtls_aes_setkey_enc(&ctx, encKey.data(), 128);
     mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_ENCRYPT, m_bodySize, iv.data(),
                           m_saveBody, m_saveBody_encoded);
     mbedtls_aes_free(&ctx);
@@ -241,9 +239,10 @@ void SaveDataFactory::encode() {
         shuffle();
     }
 
+    std::array<uint8_t, 0x10> cmacKey = getKey(keyRNG);
     mbedtls_cipher_info_t cipher_info =
         *mbedtls_cipher_info_from_type(MBEDTLS_CIPHER_AES_128_ECB);
-    mbedtls_cipher_cmac(&cipher_info, keys.key1.data(), 128, m_saveBody,
+    mbedtls_cipher_cmac(&cipher_info, cmacKey.data(), 128, m_saveBody,
                         m_bodySize, m_saveFooter->mac.data());
 }
 
@@ -254,13 +253,14 @@ void SaveDataFactory::decode() {
     if (m_version == 4 or m_version == 7) {
         unshuffle();
     }
-    KeyPack keys = getKeys(m_saveFooter->keySeed);
     std::array<uint8_t, 0x10> iv;
     iv = m_saveFooter->iv;
+    SeedRand keyRNG(m_saveFooter->keySeed);
 
+    std::array<uint8_t, 0x10> encKey = getKey(keyRNG);
     mbedtls_aes_context ctx;
     mbedtls_aes_init(&ctx);
-    mbedtls_aes_setkey_dec(&ctx, keys.key0.data(), 128);
+    mbedtls_aes_setkey_dec(&ctx, encKey.data(), 128);
     mbedtls_aes_crypt_cbc(&ctx, MBEDTLS_AES_DECRYPT, m_bodySize, iv.data(),
                           m_saveBody_encoded, m_saveBody);
     mbedtls_aes_free(&ctx);
@@ -270,9 +270,10 @@ void SaveDataFactory::decode() {
     }
 
     std::array<uint8_t, 0x10> calced_mac;
+    std::array<uint8_t, 0x10> cmacKey = getKey(keyRNG);
     mbedtls_cipher_info_t cipher_info =
         *mbedtls_cipher_info_from_type(MBEDTLS_CIPHER_AES_128_ECB);
-    mbedtls_cipher_cmac(&cipher_info, keys.key1.data(), 128, m_saveBody,
+    mbedtls_cipher_cmac(&cipher_info, cmacKey.data(), 128, m_saveBody,
                         m_bodySize, calced_mac.data());
 
     if (m_saveFooter->mac != calced_mac) {

@@ -53,12 +53,8 @@ class SaveDataFactory {
     static const uint32_t CRYPT_TAB4[];
     static const uint32_t CRYPT_TAB7[];
     const uint32_t* m_cryptTab;
-    
-    typedef struct {
-        std::array<uint8_t, 0x10> key0;
-        std::array<uint8_t, 0x10> key1;
-    } KeyPack;
-    KeyPack getKeys(const std::array<uint32_t, 4> key_seed);
+
+    std::array<uint8_t, 0x10> getKey(SeedRand& RNG);
 
     void encode();
     void decode();
