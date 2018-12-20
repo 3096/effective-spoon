@@ -64,7 +64,7 @@ int splatsave(int argc, char const* argv[]) {
                          "was previously unmodified, please submit an issue "
                          "on the project's GitHub page or send me an email at "
                          "contact@the3096.com! Thank you."
-                      << std::hex << e.m_size << std::endl;
+                      << std::endl;
         } else {
             std::cout << "Save size incorrect: 0x" << std::hex << e.m_size
                   << std::endl;
@@ -74,7 +74,11 @@ int splatsave(int argc, char const* argv[]) {
         std::cout << "Save version unsupported: " << e.m_version << std::endl;
         return -3;
     } catch (SaveDataFactory::DecodeFailToVerify& e) {
-        std::cout << "Cannot verify save." << std::endl;
+        std::cout << "Cannot verify save. If you believe this is a mistake, "
+                     "and your save is intact, please submit an issue "
+                     "on the project's GitHub page or send me an email at "
+                     "contact@the3096.com! Thank you."
+                  << std::endl;
         return -2;
     } catch (SaveDataFactory::CouldNotOpenFile& e) {
         std::cout << "Could not open " << path << std::endl;
