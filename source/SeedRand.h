@@ -13,4 +13,6 @@ class SeedRand {
     SeedRand(std::array<uint32_t, 4> state);
 
     uint32_t getU32();
+    uint64_t getU64();
+    std::array<uint32_t, 4> getContext();
 };
