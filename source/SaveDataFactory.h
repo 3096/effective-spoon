@@ -45,7 +45,7 @@ class SaveDataFactory {
 
     // save content
     int m_version;
-    static const int LATEST_SUPPORT_VERS = 7;
+    static const int LATEST_SUPPORT_VERS = 8;
 
     // save crypto
     static const uint32_t CRYPT_TAB1[];
@@ -53,17 +53,22 @@ class SaveDataFactory {
     static const uint32_t CRYPT_TAB4[];
     static const uint32_t CRYPT_TAB7[];
     const uint32_t* m_cryptTab;
-    
-    typedef struct {
-        std::array<uint8_t, 0x10> key0;
-        std::array<uint8_t, 0x10> key1;
-    } KeyPack;
-    KeyPack getKeys(const std::array<uint32_t, 4> key_seed);
 
+    std::array<uint8_t, 0x10> getKey(SeedRand& RNG);
+
+    enum CryptMode {
+        DECRYPT = MBEDTLS_AES_DECRYPT,
+        ENCRYPT = MBEDTLS_AES_ENCRYPT
+    };
+
+    void cryptBlock(uint8_t* dst, uint8_t* src, size_t size,
+                    std::array<uint8_t, 0x10> iv, CryptMode mode,
+                    SeedRand& RNG);
     void encode();
     void decode();
-    int randBytes(uint8_t* output, const size_t output_len);
     void updateCRC();
+    int randBytes(uint8_t* output, const size_t output_len);
+    uint32_t reverseBitsU32(uint32_t value);
 
     // save shuffle
     typedef struct {
@@ -72,8 +77,10 @@ class SaveDataFactory {
         size_t shuffled_offset;
     } ShuffleBlock;
 
-    void unshuffle(bool onEncoded = true);
-    void shuffle(bool onEncoded = true);
+    enum ShuffleMode { SHUFFLE, UNSHUFFLE };
+    enum ShuffleBuffer { ENCODED_BUFF, DECODED_BUFF };
+
+    void shuffleBody(ShuffleMode mode, ShuffleBuffer targetBuff);
     std::vector<ShuffleBlock> getShuffleBlocks(size_t total_size,
                                                uint32_t seed);
 
