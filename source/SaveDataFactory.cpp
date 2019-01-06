@@ -372,10 +372,10 @@ std::vector<SaveDataFactory::ShuffleBlock> SaveDataFactory::getShuffleBlocks(
         uint64_t rand_num = RNG.getU32();
         size_t block_size;
         if(m_version == 8) {
-            block_size =
-                (((((max_block_size - min_block_size) & 0xFFFFFFF0) + 1) *
-                    rand_num >> 32) + (min_block_size & 0xFFFFFFF0)) &
-                    0xFFFFFFF0;
+            block_size = ((((max_block_size & 0xFFFFFFF0) -
+                            (min_block_size & 0xFFFFFFF0) + 1) *
+                             rand_num >> 32) +
+                            (min_block_size & 0xFFFFFFF0)) & 0xFFFFFFF0;
         } else {
             block_size =
                 ((max_block_size - min_block_size + 1) * rand_num >> 32) +
