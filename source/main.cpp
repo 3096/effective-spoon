@@ -5,13 +5,7 @@
 #include <switch.h>
 #endif
 
-int splatsave(int argc, char const* argv[]) {
-    std::string path;
-    if (argc < 2)
-        path = "save.dat";
-    else
-        path = argv[1];
-
+int splatsave(std::string path, std::string command) {
     try {
         SaveDataFactory svFactory(path);
 
@@ -30,18 +24,22 @@ int splatsave(int argc, char const* argv[]) {
             save_write_size = svFactory.getEncodedSaveFileSize();
         }
 
+#ifndef __SWITCH__
         std::ifstream fileExistCheck(save_output_path);
         if (fileExistCheck.good()) {
             std::cout << "Overwrite existing " << save_output_path
                       << "? (y or n) ";
             std::string userInput;
             getline(std::cin, userInput);
-            char firstLetter = userInput.at(0);
-            if(firstLetter != 'y' and firstLetter != 'Y') {
+            char firstLetter;
+            if (userInput.length() < 1 or
+                ((firstLetter = userInput.at(0)) != 'y' and
+                 firstLetter != 'Y')) {
                 std::cout << "Aborted." << std::endl;
                 return 0;
             }
         }
+#endif
 
         std::ofstream fileos(save_output_path, std::fstream::binary);
         if (!fileos) {
@@ -83,10 +81,10 @@ int splatsave(int argc, char const* argv[]) {
     } catch (SaveDataFactory::CouldNotOpenFile& e) {
         std::cout << "Could not open " << path << std::endl;
         std::cout << "Usage: " << std::endl;
-        std::cout << *argv
+        std::cout << command
                   << " {encrypted save file path} {decrypted output path}"
                   << std::endl;
-        std::cout << *argv
+        std::cout << command
                   << " {decrypted save file path} {re-encrypted output path}"
                   << std::endl;
         std::cout << "Decrypt or re-encrypt mode is determined by file size."
@@ -99,11 +97,26 @@ int splatsave(int argc, char const* argv[]) {
 
 int main(int argc, char const* argv[]) {
 #ifdef __SWITCH__
-    gfxInitDefault();
     consoleInit(NULL);
 #endif
 
-    int ret = splatsave(argc, argv);
+    const char* DEFAULT_PATH = "save.dat";
+    const char** paths = argv;
+    int paths_count;
+    if (argc < 2) {
+        paths = &DEFAULT_PATH;
+        paths_count = 1;
+    } else {
+        paths = &argv[1];
+        paths_count = argc - 1;
+    }
+    int ret;
+    for (int i = 0; i < paths_count; i++) {
+        ret = splatsave(paths[i], *argv);
+        if (ret != 0) {
+            break;
+        }
+    }
 
 #ifdef __SWITCH__
     std::cout << "Press + to exit..." << std::endl;
@@ -111,11 +124,9 @@ int main(int argc, char const* argv[]) {
         hidScanInput();
         u64 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
         if (kDown & KEY_PLUS) break;
-        gfxFlushBuffers();
-        gfxSwapBuffers();
-        gfxWaitForVsync();
+        consoleUpdate(NULL);
     }
-    gfxExit();
+    consoleExit(NULL);
 #endif
 
     return ret;
