@@ -1,5 +1,5 @@
 # splatsave
-C++ implementation of Splatoon 2 save decoding/encoding, supports up to save version 8 (update 4.3.1).
+C++ implementation of Splatoon 2 save decryption/encryption, supports up to save version 8 (update 4.6.1).
 
 Requires [mbedtls](https://github.com/ARMmbed/mbedtls) and zlib to compile.
 
