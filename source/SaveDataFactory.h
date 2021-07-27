@@ -6,15 +6,13 @@
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
 #include <zlib.h>
+
 #include <array>
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <vector>
-
-#ifdef __SWITCH__
-#include <switch.h>
-#endif
 
 #include "SeedRand.h"
 
@@ -28,15 +26,15 @@ class SaveDataFactory {
 
     static const uint8_t HEADER_SIZE = 0x10;
     static const uint8_t FOOTER_SIZE = 0x30;
-    
+
     typedef struct {
         std::array<uint8_t, 0x10> iv;
         std::array<uint32_t, 4> keySeed;
         std::array<uint8_t, 0x10> mac;
     } SaveFooter;
-    
-    uint8_t* m_saveData;
-    uint8_t* m_saveData_encoded;
+
+    std::unique_ptr<uint8_t[]> m_saveData;
+    std::unique_ptr<uint8_t[]> m_saveData_encoded;
     uint8_t* m_saveBody;
     uint8_t* m_saveBody_encoded;
     SaveFooter* m_saveFooter;
@@ -56,13 +54,9 @@ class SaveDataFactory {
 
     std::array<uint8_t, 0x10> getKey(SeedRand& RNG);
 
-    enum CryptMode {
-        DECRYPT = MBEDTLS_AES_DECRYPT,
-        ENCRYPT = MBEDTLS_AES_ENCRYPT
-    };
+    enum CryptMode { DECRYPT = MBEDTLS_AES_DECRYPT, ENCRYPT = MBEDTLS_AES_ENCRYPT };
 
-    void cryptBlock(uint8_t* dst, uint8_t* src, size_t size,
-                    std::array<uint8_t, 0x10> iv, CryptMode mode,
+    void cryptBlock(uint8_t* dst, uint8_t* src, size_t size, std::array<uint8_t, 0x10> iv, CryptMode mode,
                     SeedRand& RNG);
     void encode();
     void decode();
@@ -81,8 +75,7 @@ class SaveDataFactory {
     enum ShuffleBuffer { ENCODED_BUFF, DECODED_BUFF };
 
     void shuffleBody(ShuffleMode mode, ShuffleBuffer targetBuff);
-    std::vector<ShuffleBlock> getShuffleBlocks(size_t total_size,
-                                               uint32_t seed);
+    std::vector<ShuffleBlock> getShuffleBlocks(size_t total_size, uint32_t seed);
 
     EncodeState m_initial_encodeState;
 
@@ -99,11 +92,10 @@ class SaveDataFactory {
     EncodeState getInitialEncodeState();
 
     class SaveSizeUnknown : public std::exception {
-    public:
+       public:
         size_t m_size;
         int m_version;
-        SaveSizeUnknown(const size_t size, const int version)
-            : m_size(size), m_version(version) {}
+        SaveSizeUnknown(const size_t size, const int version) : m_size(size), m_version(version) {}
     };
     class DecodeFailToVerify : public std::exception {};
     class CouldNotOpenFile : public std::exception {};

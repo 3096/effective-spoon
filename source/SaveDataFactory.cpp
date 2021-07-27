@@ -1,5 +1,11 @@
 #include "SaveDataFactory.h"
 
+#ifdef __SWITCH__
+#    include <switch.h>
+#endif
+
+// clang-format off
+
 const int SaveDataFactory::ENCODED_FILE_SIZE[] = {
     0x483B0, 0x483E0, 0x86840, 0x88D90, 0x88D90, 0x88D90, -1, 0x88D90, 0x88D90
 };
@@ -83,10 +89,11 @@ const uint32_t SaveDataFactory::CRYPT_TAB7[]  = {
     0xFDB20FEC, 0x8FF500A4, 0x288179A7, 0x4C745F89
 };
 
+// clang-format on
+
 SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
-    std::ifstream saveFileIS(save_inPath.c_str(),
-                             std::ios::binary | std::ios::ate);
-    std::streamsize saveFileInSize = saveFileIS.tellg();
+    auto saveFileIS = std::ifstream(save_inPath.c_str(), std::ios::binary | std::ios::ate);
+    auto saveFileInSize = saveFileIS.tellg();
     saveFileIS.seekg(0, std::ios::beg);
 
     if (saveFileInSize < 0) {
@@ -94,73 +101,63 @@ SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
         throw CouldNotOpenFile();
     }
 
-    uint8_t* saveFileInBuffer = new uint8_t[saveFileInSize];
-    try {
-        saveFileIS.read((char*)saveFileInBuffer, saveFileInSize);
-        saveFileIS.close();
+    auto p_saveFileInBuffer = std::make_unique<uint8_t[]>(saveFileInSize);
+    saveFileIS.read((char*)p_saveFileInBuffer.get(), saveFileInSize);
+    saveFileIS.close();
 
-        m_version = *(int*)saveFileInBuffer;
+    m_version = *(decltype(m_version)*)p_saveFileInBuffer.get();
 
-        // check version
-        if (m_version > LATEST_SUPPORT_VERS || m_version < 0) {
-            throw UnsupportedSaveVersion(m_version);
-        }
-
-        // check size to set m_initial_encodeState and sizes
-        if (saveFileInSize == HEADER_SIZE + BODY_SIZE[m_version]) {
-            m_initial_encodeState = DECODED;
-        } else if (saveFileInSize == ENCODED_FILE_SIZE[m_version]) {
-            m_initial_encodeState = ENCODED;
-        } else {
-            throw SaveSizeUnknown(saveFileInSize, m_version);
-        }
-
-        // select crypto look up table and save sizes
-        switch (m_version) {
-            case 1:
-            case 2:
-                m_cryptTab = CRYPT_TAB1;
-                break;
-            case 3:
-                m_cryptTab = CRYPT_TAB3;
-                break;
-            case 4:
-            case 5:
-                m_cryptTab = CRYPT_TAB4;
-                break;
-            case 7:
-            case 8:
-                m_cryptTab = CRYPT_TAB7;
-                break;
-            case 6:
-            default:
-                throw UnsupportedSaveVersion(m_version);
-        }
-
-        m_fileSize_encoded = ENCODED_FILE_SIZE[m_version];
-        m_bodySize = BODY_SIZE[m_version];
-
-    } catch (UnsupportedSaveVersion& e) {
-        delete[] saveFileInBuffer;
-        throw e;
-    } catch (SaveSizeUnknown& e) {
-        delete[] saveFileInBuffer;
-        throw e;
+    // check version
+    if (m_version > LATEST_SUPPORT_VERS || m_version < 0) {
+        throw UnsupportedSaveVersion(m_version);
     }
+
+    // check size to set m_initial_encodeState and sizes
+    if (saveFileInSize == HEADER_SIZE + BODY_SIZE[m_version]) {
+        m_initial_encodeState = DECODED;
+    } else if (saveFileInSize == ENCODED_FILE_SIZE[m_version]) {
+        m_initial_encodeState = ENCODED;
+    } else {
+        throw SaveSizeUnknown(saveFileInSize, m_version);
+    }
+
+    // select crypto look up table and save sizes
+    switch (m_version) {
+        case 1:
+        case 2:
+            m_cryptTab = CRYPT_TAB1;
+            break;
+        case 3:
+            m_cryptTab = CRYPT_TAB3;
+            break;
+        case 4:
+        case 5:
+            m_cryptTab = CRYPT_TAB4;
+            break;
+        case 7:
+        case 8:
+            m_cryptTab = CRYPT_TAB7;
+            break;
+        case 6:
+        default:
+            throw UnsupportedSaveVersion(m_version);
+    }
+
+    m_fileSize_encoded = ENCODED_FILE_SIZE[m_version];
+    m_bodySize = BODY_SIZE[m_version];
 
     // initialize save buffers and pointers
     if (m_initial_encodeState == ENCODED) {
-        m_saveData = new uint8_t[HEADER_SIZE + BODY_SIZE[m_version]];
-        m_saveData_encoded = saveFileInBuffer;
+        m_saveData = std::make_unique<uint8_t[]>(HEADER_SIZE + BODY_SIZE[m_version]);
+        m_saveData_encoded = std::move(p_saveFileInBuffer);
     } else {
-        m_saveData = saveFileInBuffer;
-        m_saveData_encoded = new uint8_t[ENCODED_FILE_SIZE[m_version]];
+        m_saveData = std::move(p_saveFileInBuffer);
+        m_saveData_encoded = std::make_unique<uint8_t[]>(ENCODED_FILE_SIZE[m_version]);
     }
     m_saveBody = &m_saveData[HEADER_SIZE];
     m_saveBody_encoded = &m_saveData_encoded[HEADER_SIZE];
     if (m_version != 0) {
-        m_saveFooter =
-            (SaveFooter*)&m_saveData_encoded[m_fileSize_encoded - FOOTER_SIZE];
+        m_saveFooter = (SaveFooter*)&m_saveData_encoded[m_fileSize_encoded - FOOTER_SIZE];
     } else {
         m_saveFooter = nullptr;
     }
@@ -178,10 +175,7 @@ SaveDataFactory::SaveDataFactory(const std::string save_inPath) {
     updateCRC();
 }
 
-SaveDataFactory::~SaveDataFactory() {
-    delete[] m_saveData;
-    delete[] m_saveData_encoded;
-}
+SaveDataFactory::~SaveDataFactory() {}
 
 std::array<uint8_t, 0x10> SaveDataFactory::getKey(SeedRand& RNG) {
     std::array<uint8_t, 0x10> key;
@@ -189,9 +183,7 @@ std::array<uint8_t, 0x10> SaveDataFactory::getKey(SeedRand& RNG) {
         uint32_t k = 0;
         for (int j = 0; j < 4; j++) {
             k <<= 8;
-            k |= (uint32_t)((m_cryptTab[RNG.getU32() >> 26] >>
-                             ((RNG.getU32() >> 27) & 0x18)) &
-                            0xFF);
+            k |= (uint32_t)((m_cryptTab[RNG.getU32() >> 26] >> ((RNG.getU32() >> 27) & 0x18)) & 0xFF);
         }
         ((uint32_t*)&key)[i] = k;
     }
@@ -199,14 +191,13 @@ std::array<uint8_t, 0x10> SaveDataFactory::getKey(SeedRand& RNG) {
     return key;
 }
 
-void SaveDataFactory::cryptBlock(uint8_t* dst, uint8_t* src, size_t size,
-                                 std::array<uint8_t, 0x10> iv, CryptMode mode,
+void SaveDataFactory::cryptBlock(uint8_t* dst, uint8_t* src, size_t size, std::array<uint8_t, 0x10> iv, CryptMode mode,
                                  SeedRand& RNG) {
     std::array<uint8_t, 0x10> key = getKey(RNG);
     mbedtls_aes_context ctx;
     mbedtls_aes_init(&ctx);
     if (mode == DECRYPT) {
-        mbedtls_aes_setkey_dec(&ctx, key.data(), 128);        
+        mbedtls_aes_setkey_dec(&ctx, key.data(), 128);
     } else {
         mbedtls_aes_setkey_enc(&ctx, key.data(), 128);
     }
@@ -217,32 +208,29 @@ void SaveDataFactory::cryptBlock(uint8_t* dst, uint8_t* src, size_t size,
 void SaveDataFactory::encode() {
     // ver 0 save is plaintext
     if (m_version == 0) {
-        std::memcpy(m_saveData_encoded, m_saveData, m_fileSize_encoded);
+        std::memcpy(m_saveData_encoded.get(), m_saveData.get(), m_fileSize_encoded);
         return;
     }
 
-    std::memcpy(m_saveData_encoded, m_saveData, HEADER_SIZE);
+    std::memcpy(m_saveData_encoded.get(), m_saveData.get(), HEADER_SIZE);
 
     // gen random iv and key seed
-    randBytes((uint8_t*)m_saveFooter,
-              sizeof(m_saveFooter->iv) + sizeof(m_saveFooter->keySeed));
+    randBytes((uint8_t*)m_saveFooter, sizeof(m_saveFooter->iv) + sizeof(m_saveFooter->keySeed));
 
     std::array<uint8_t, 0x10> iv = m_saveFooter->iv;
     SeedRand keyRNG(m_saveFooter->keySeed);
 
-    uint8_t* tmpOriginalBody = nullptr;
     if (m_version == 7 or m_version == 8) {
-        tmpOriginalBody = new uint8_t[m_bodySize];
-        std::memcpy(tmpOriginalBody, m_saveBody, m_bodySize);
+        auto p_tmpOriginalBody = std::make_unique<uint8_t[]>(m_bodySize);
+        std::memcpy(p_tmpOriginalBody.get(), m_saveBody, m_bodySize);
+
         shuffleBody(SHUFFLE, DECODED_BUFF);
-    }
+        cryptBlock(m_saveBody_encoded, m_saveBody, m_bodySize, iv, ENCRYPT, keyRNG);
 
-    cryptBlock(m_saveBody_encoded, m_saveBody, m_bodySize, iv, ENCRYPT,
-               keyRNG);
+        std::memcpy(m_saveBody, p_tmpOriginalBody.get(), m_bodySize);
 
-    if (m_version == 7 or m_version == 8) {
-        std::memcpy(m_saveBody, tmpOriginalBody, m_bodySize);
-        delete[] tmpOriginalBody;
+    } else {
+        cryptBlock(m_saveBody_encoded, m_saveBody, m_bodySize, iv, ENCRYPT, keyRNG);
     }
 
     if (m_version == 4 or m_version == 7 or m_version == 8) {
@@ -250,16 +238,13 @@ void SaveDataFactory::encode() {
     }
 
     std::array<uint8_t, 0x10> cmacKey = getKey(keyRNG);
-    mbedtls_cipher_info_t cipher_info =
-        *mbedtls_cipher_info_from_type(MBEDTLS_CIPHER_AES_128_ECB);
-    mbedtls_cipher_cmac(&cipher_info, cmacKey.data(), 128, m_saveBody,
-                        m_bodySize, m_saveFooter->mac.data());
+    mbedtls_cipher_info_t cipher_info = *mbedtls_cipher_info_from_type(MBEDTLS_CIPHER_AES_128_ECB);
+    mbedtls_cipher_cmac(&cipher_info, cmacKey.data(), 128, m_saveBody, m_bodySize, m_saveFooter->mac.data());
 }
 
 void SaveDataFactory::decode() {
     // copy header
-    std::memcpy(m_saveData, m_saveData_encoded, HEADER_SIZE);
-
+    std::memcpy(m_saveData.get(), m_saveData_encoded.get(), HEADER_SIZE);
 
     if (m_version == 4 or m_version == 7 or m_version == 8) {
         shuffleBody(UNSHUFFLE, ENCODED_BUFF);
@@ -268,8 +253,7 @@ void SaveDataFactory::decode() {
     std::array<uint8_t, 0x10> iv = m_saveFooter->iv;
     SeedRand keyRNG(m_saveFooter->keySeed);
 
-    cryptBlock(m_saveBody, m_saveBody_encoded, m_bodySize, iv, DECRYPT,
-               keyRNG);
+    cryptBlock(m_saveBody, m_saveBody_encoded, m_bodySize, iv, DECRYPT, keyRNG);
 
     if (m_version == 7 or m_version == 8) {
         shuffleBody(UNSHUFFLE, DECODED_BUFF);
@@ -277,31 +261,22 @@ void SaveDataFactory::decode() {
 
     std::array<uint8_t, 0x10> calced_mac;
     std::array<uint8_t, 0x10> cmacKey = getKey(keyRNG);
-    mbedtls_cipher_info_t cipher_info =
-        *mbedtls_cipher_info_from_type(MBEDTLS_CIPHER_AES_128_ECB);
-    mbedtls_cipher_cmac(&cipher_info, cmacKey.data(), 128, m_saveBody,
-                        m_bodySize, calced_mac.data());
+    mbedtls_cipher_info_t cipher_info = *mbedtls_cipher_info_from_type(MBEDTLS_CIPHER_AES_128_ECB);
+    mbedtls_cipher_cmac(&cipher_info, cmacKey.data(), 128, m_saveBody, m_bodySize, calced_mac.data());
 
     if (m_saveFooter->mac != calced_mac) {
         throw DecodeFailToVerify();
     }
 }
 
-void SaveDataFactory::updateCRC() {
-    *(uint32_t*)&m_saveData[0x8] =
-        crc32(0L, &m_saveData[HEADER_SIZE], m_bodySize);
-}
+void SaveDataFactory::updateCRC() { *(uint32_t*)&m_saveData[0x8] = crc32(0L, &m_saveData[HEADER_SIZE], m_bodySize); }
 
-void SaveDataFactory::shuffleBody(ShuffleMode mode,
-                                       ShuffleBuffer targetBuff) {
-    uint8_t* tmpBodyBuffer = new uint8_t[m_bodySize];
-    uint8_t* dstBodyBuffer =
-        targetBuff == ENCODED_BUFF ? m_saveBody_encoded : m_saveBody;
-    uint32_t* crc = targetBuff == ENCODED_BUFF
-                        ? (uint32_t*)&m_saveData_encoded[0x8]
-                        : (uint32_t*)&m_saveData[0x8];
+void SaveDataFactory::shuffleBody(ShuffleMode mode, ShuffleBuffer targetBuff) {
+    auto p_tmpBodyBuffer = std::make_unique<uint8_t[]>(m_bodySize);
+    uint8_t* dstBodyBuffer = targetBuff == ENCODED_BUFF ? m_saveBody_encoded : m_saveBody;
+    uint32_t* crc = targetBuff == ENCODED_BUFF ? (uint32_t*)&m_saveData_encoded[0x8] : (uint32_t*)&m_saveData[0x8];
 
-    std::memcpy(tmpBodyBuffer, dstBodyBuffer, m_bodySize);
+    std::memcpy(p_tmpBodyBuffer.get(), dstBodyBuffer, m_bodySize);
 
     uint32_t shuffleSeed;
     if (m_version == 8) {
@@ -313,47 +288,36 @@ void SaveDataFactory::shuffleBody(ShuffleMode mode,
         shuffleSeed = *crc;
     }
 
-    std::vector<ShuffleBlock> shuffleBlocks =
-        getShuffleBlocks(m_bodySize, shuffleSeed);
+    std::vector<ShuffleBlock> shuffleBlocks = getShuffleBlocks(m_bodySize, shuffleSeed);
 
     for (size_t i = 0; i < shuffleBlocks.size(); i++) {
         if (m_version == 8) {
             size_t block_size = shuffleBlocks[i].block_size;
             SeedRand blockCryptRNG(block_size);
-            std::array<uint8_t, 0x10> iv  = m_saveFooter->iv;
+            std::array<uint8_t, 0x10> iv = m_saveFooter->iv;
             *(uint64_t*)&iv[0] = blockCryptRNG.getU64();
             *(uint64_t*)&iv[8] = blockCryptRNG.getU64();
             if (mode == SHUFFLE) {
-                cryptBlock(
-                    &dstBodyBuffer[shuffleBlocks[i].shuffled_offset],
-                    &tmpBodyBuffer[shuffleBlocks[i].unshuffled_offset],
-                    block_size, iv, ENCRYPT, blockCryptRNG);
+                cryptBlock(&dstBodyBuffer[shuffleBlocks[i].shuffled_offset],
+                           &p_tmpBodyBuffer[shuffleBlocks[i].unshuffled_offset], block_size, iv, ENCRYPT,
+                           blockCryptRNG);
             } else {
-                cryptBlock(
-                    &dstBodyBuffer[shuffleBlocks[i].unshuffled_offset],
-                    &tmpBodyBuffer[shuffleBlocks[i].shuffled_offset],
-                    block_size, iv, DECRYPT, blockCryptRNG);
+                cryptBlock(&dstBodyBuffer[shuffleBlocks[i].unshuffled_offset],
+                           &p_tmpBodyBuffer[shuffleBlocks[i].shuffled_offset], block_size, iv, DECRYPT, blockCryptRNG);
             }
         } else {
             if (mode == SHUFFLE) {
-                std::memcpy(
-                    &dstBodyBuffer[shuffleBlocks[i].shuffled_offset],
-                    &tmpBodyBuffer[shuffleBlocks[i].unshuffled_offset],
-                    shuffleBlocks[i].block_size);
+                std::memcpy(&dstBodyBuffer[shuffleBlocks[i].shuffled_offset],
+                            &p_tmpBodyBuffer[shuffleBlocks[i].unshuffled_offset], shuffleBlocks[i].block_size);
             } else {
-                std::memcpy(
-                    &dstBodyBuffer[shuffleBlocks[i].unshuffled_offset],
-                    &tmpBodyBuffer[shuffleBlocks[i].shuffled_offset],
-                    shuffleBlocks[i].block_size);
+                std::memcpy(&dstBodyBuffer[shuffleBlocks[i].unshuffled_offset],
+                            &p_tmpBodyBuffer[shuffleBlocks[i].shuffled_offset], shuffleBlocks[i].block_size);
             }
         }
     }
-
-    delete[] tmpBodyBuffer;
 }
 
-std::vector<SaveDataFactory::ShuffleBlock> SaveDataFactory::getShuffleBlocks(
-    size_t total_size, uint32_t seed) {
+std::vector<SaveDataFactory::ShuffleBlock> SaveDataFactory::getShuffleBlocks(size_t total_size, uint32_t seed) {
     SeedRand RNG(seed);
     size_t min_block_size = total_size / 0x10;
     size_t max_block_size = min_block_size * 2;
@@ -371,15 +335,12 @@ std::vector<SaveDataFactory::ShuffleBlock> SaveDataFactory::getShuffleBlocks(
 
         uint64_t rand_num = RNG.getU32();
         size_t block_size;
-        if(m_version == 8) {
-            block_size = ((((max_block_size & 0xFFFFFFF0) -
-                            (min_block_size & 0xFFFFFFF0) + 1) *
-                             rand_num >> 32) +
-                            (min_block_size & 0xFFFFFFF0)) & 0xFFFFFFF0;
+        if (m_version == 8) {
+            block_size = ((((max_block_size & 0xFFFFFFF0) - (min_block_size & 0xFFFFFFF0) + 1) * rand_num >> 32) +
+                          (min_block_size & 0xFFFFFFF0)) &
+                         0xFFFFFFF0;
         } else {
-            block_size =
-                ((max_block_size - min_block_size + 1) * rand_num >> 32) +
-                min_block_size;
+            block_size = ((max_block_size - min_block_size + 1) * rand_num >> 32) + min_block_size;
         }
 
         block_indices.push_back(cur_block_idx);
@@ -399,8 +360,7 @@ std::vector<SaveDataFactory::ShuffleBlock> SaveDataFactory::getShuffleBlocks(
     uint64_t remaining_blocks_to_shuffle = block_indices.size();
     while (remaining_blocks_to_shuffle > 1) {
         size_t switch_to_idx = remaining_blocks_to_shuffle - 1;
-        size_t switch_from_idx =
-            remaining_blocks_to_shuffle * RNG.getU32() >> 0x20;
+        size_t switch_from_idx = remaining_blocks_to_shuffle * RNG.getU32() >> 0x20;
         size_t to_back = block_indices[switch_from_idx];
         block_indices[switch_from_idx] = block_indices[switch_to_idx];
         block_indices[switch_to_idx] = to_back;
@@ -410,9 +370,8 @@ std::vector<SaveDataFactory::ShuffleBlock> SaveDataFactory::getShuffleBlocks(
     std::vector<ShuffleBlock> shuffle_blocks;
     size_t cur_shuffled_offset = 0;
     for (size_t i = 0; i < block_indices.size(); i++) {
-        shuffle_blocks.push_back({block_sizes[block_indices[i]],
-                                  unshuffled_offsets[block_indices[i]],
-                                  cur_shuffled_offset});
+        shuffle_blocks.push_back(
+            {block_sizes[block_indices[i]], unshuffled_offsets[block_indices[i]], cur_shuffled_offset});
         cur_shuffled_offset += block_sizes[block_indices[i]];
     }
     return shuffle_blocks;
@@ -427,11 +386,10 @@ int SaveDataFactory::randBytes(uint8_t* output, const size_t output_len) {
     mbedtls_entropy_init(&entropy);
     mbedtls_ctr_drbg_init(&ctr_drbg);
 
-    std::string pers = "Flow best waifu";
+    const char* pers = "Flow best waifu";
 
-    if ((ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy,
-                                     (unsigned char*)pers.c_str(),
-                                     pers.size())) != 0) {
+    ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, (unsigned char*)pers, strlen(pers));
+    if (ret != 0) {
         return ret;
     }
     ret = mbedtls_ctr_drbg_random(&ctr_drbg, output, output_len);
@@ -446,28 +404,24 @@ int SaveDataFactory::randBytes(uint8_t* output, const size_t output_len) {
 }
 
 uint32_t SaveDataFactory::reverseBitsU32(uint32_t value) {
-    value = ((value << 1 ) & 0xAAAAAAAA) | ((value >> 1 ) & 0x55555555);
-    value = ((value << 2 ) & 0xCCCCCCCC) | ((value >> 2 ) & 0x33333333);
-    value = ((value << 4 ) & 0xF0F0F0F0) | ((value >> 4 ) & 0x0F0F0F0F);
-    value = ((value << 8 ) & 0xFF00FF00) | ((value >> 8 ) & 0x00FF00FF);
+    value = ((value << 1) & 0xAAAAAAAA) | ((value >> 1) & 0x55555555);
+    value = ((value << 2) & 0xCCCCCCCC) | ((value >> 2) & 0x33333333);
+    value = ((value << 4) & 0xF0F0F0F0) | ((value >> 4) & 0x0F0F0F0F);
+    value = ((value << 8) & 0xFF00FF00) | ((value >> 8) & 0x00FF00FF);
     value = ((value << 16) & 0xFFFF0000) | ((value >> 16) & 0x0000FFFF);
     return value;
 }
 
-const uint8_t* SaveDataFactory::getSaveDecodedPtr() { return m_saveData; }
+const uint8_t* SaveDataFactory::getSaveDecodedPtr() { return m_saveData.get(); }
 
 const uint8_t* SaveDataFactory::getSaveEncodedPtr() {
     encode();
-    return m_saveData_encoded;
+    return m_saveData_encoded.get();
 }
 
-size_t SaveDataFactory::getDecodedSaveFileSize() {
-    return HEADER_SIZE + m_bodySize;
-}
+size_t SaveDataFactory::getDecodedSaveFileSize() { return HEADER_SIZE + m_bodySize; }
 size_t SaveDataFactory::getEncodedSaveFileSize() { return m_fileSize_encoded; }
 
 int SaveDataFactory::getSaveVersion() { return m_version; }
 
-SaveDataFactory::EncodeState SaveDataFactory::getInitialEncodeState() {
-    return m_initial_encodeState;
-}
+SaveDataFactory::EncodeState SaveDataFactory::getInitialEncodeState() { return m_initial_encodeState; }
